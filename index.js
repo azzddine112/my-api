@@ -11,64 +11,44 @@ app.get('/', (req, res) => {
 });
 
 app.get('/api/extract', async (req, res) => {
-    const videoUrl = req.query.url;
+    let videoUrl = req.query.url;
     if (!videoUrl) {
         return res.status(400).json({ success: false, message: 'الرابط مطلوب' });
     }
 
-    try {
-        // المحاولة الأولى: استخدام محرك Cobalt المباشر
-        const cobaltResponse = await axios.post('https://api.cobalt.tools/api/json', {
-            url: videoUrl,
-            videoQuality: '720'
-        }, {
-            headers: {
-                'Accept': 'application/json',
-                'Content-Type': 'application/json',
-                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)'
-            },
-            timeout: 10000
-        });
-
-        const cData = cobaltResponse.data;
-
-        if (cData.status === 'stream' || cData.status === 'redirect') {
-            return res.json({
-                success: true,
-                video_url: cData.url,
-                thumbnail: ''
-            });
-        } else if (cData.status === 'picker' && cData.picker && cData.picker.length > 0) {
-            return res.json({
-                success: true,
-                video_url: cData.picker[0].url,
-                thumbnail: cData.picker[0].thumb || ''
-            });
-        }
-    } catch (e) {
-        // في حال تعذر المحاولة الأولى يتم الانتقال للمحاولة الاحتياطية تلقائياً
+    // تنظيف الرابط من المعلمات الزائدة مثل ?s=20
+    if (videoUrl.includes('?')) {
+        videoUrl = videoUrl.split('?')[0];
     }
 
     try {
-        // المحاولة الثانية الاحتياطية (VxTwitter)
         const match = videoUrl.match(/status\/(\d+)/);
-        if (match) {
-            const tweetId = match[1];
-            const response = await axios.get(`https://api.vxtwitter.com/Twitter/status/${tweetId}`, { timeout: 8000 });
-            const data = response.data;
-
-            if (data && data.media_urls && data.media_urls.length > 0) {
-                const video = data.media_urls.find(u => u.includes('.mp4') || u.includes('video')) || data.media_urls[0];
-                return res.json({
-                    success: true,
-                    video_url: video,
-                    thumbnail: data.mediaDetails && data.mediaDetails[0] ? data.mediaDetails[0].thumbnail_url : ''
-                });
-            }
+        if (!match) {
+            return res.status(400).json({ success: false, message: 'رابط التغريدة غير صالح' });
         }
-    } catch (err) {}
+        const tweetId = match[1];
 
-    res.status(400).json({ success: false, message: 'تعذر جلب الفيديو، تأكد من وجود فيديو في التغريدة' });
+        // استخدام واجهة FxTwitter الموثوقة جداً
+        const response = await axios.get(`https://api.fxtwitter.com/status/${tweetId}`, {
+            timeout: 10000,
+            headers: { 'User-Agent': 'Mozilla/5.0' }
+        });
+
+        const tweet = response.data.tweet;
+
+        if (tweet && tweet.media && tweet.media.videos && tweet.media.videos.length > 0) {
+            const video = tweet.media.videos[0];
+            return res.json({
+                success: true,
+                video_url: video.url,
+                thumbnail: tweet.media.photos && tweet.media.photos[0] ? tweet.media.photos[0].url : ''
+            });
+        }
+
+        res.status(400).json({ success: false, message: 'لا يوجد فيديو في هذه التغريدة' });
+    } catch (error) {
+        res.status(500).json({ success: false, message: 'تعذر جلب الفيديو، حاول لاحقاً' });
+    }
 });
 
 const PORT = process.env.PORT || 3000;
