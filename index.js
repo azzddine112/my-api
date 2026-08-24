@@ -38,16 +38,15 @@ app.get('/api/extract', async (req, res) => {
         } catch (e) {}
     }
 
-    // --- 2. معالجة روابط الفيسبوك و Reels ---
-    if (url.includes("facebook.com") || url.includes("fb.watch") || url.includes("reel")) {
+    // --- 2. معالجة روابط الفيسبوك و Reels و Share ---
+    if (url.includes("facebook.com") || url.includes("fb.watch") || url.includes("fb.com") || url.includes("share") || url.includes("reel")) {
         try {
-            // محرك الاستخراج المباشر لـ Reels بدون حظر
             const response = await axios.post('https://sssbiz.com/api/download', 
                 `url=${encodeURIComponent(url)}`, 
                 {
                     headers: {
                         'Content-Type': 'application/x-www-form-urlencoded',
-                        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
+                        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)'
                     },
                     timeout: 12000
                 }
