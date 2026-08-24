@@ -17,40 +17,58 @@ app.get('/api/extract', async (req, res) => {
     }
 
     try {
-        // استخراج Tweet ID سواء كان الرابط من twitter.com أو x.com
-        const match = videoUrl.match(/status\/(\d+)/);
-        if (!match) {
-            return res.status(400).json({ success: false, message: 'رابط التغريدة غير صالح' });
-        }
-        const tweetId = match[1];
-
-        // الاتصال بـ API الميديا المباشر
-        const response = await axios.get(`https://api.vxtwitter.com/Twitter/status/${tweetId}`, {
-            timeout: 12000,
+        // المحاولة الأولى: استخدام محرك Cobalt المباشر
+        const cobaltResponse = await axios.post('https://api.cobalt.tools/api/json', {
+            url: videoUrl,
+            videoQuality: '720'
+        }, {
             headers: {
+                'Accept': 'application/json',
+                'Content-Type': 'application/json',
                 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)'
-            }
+            },
+            timeout: 10000
         });
 
-        const data = response.data;
+        const cData = cobaltResponse.data;
 
-        if (data && data.media_urls && data.media_urls.length > 0) {
-            // البحث عن فيديو MP4 أولوياً
-            const video = data.media_urls.find(u => u.includes('.mp4') || u.includes('video'));
-            const finalMedia = video || data.media_urls[0];
-
+        if (cData.status === 'stream' || cData.status === 'redirect') {
             return res.json({
                 success: true,
-                video_url: finalMedia,
-                thumbnail: data.mediaDetails && data.mediaDetails[0] ? data.mediaDetails[0].thumbnail_url : '',
-                title: data.text || 'X Video'
+                video_url: cData.url,
+                thumbnail: ''
+            });
+        } else if (cData.status === 'picker' && cData.picker && cData.picker.length > 0) {
+            return res.json({
+                success: true,
+                video_url: cData.picker[0].url,
+                thumbnail: cData.picker[0].thumb || ''
             });
         }
-
-        res.status(400).json({ success: false, message: 'التغريدة لا تحتوي على وسائط قابلة للتحميل' });
-    } catch (error) {
-        res.status(500).json({ success: false, message: 'خطأ أثناء الاتصال بالخدمة' });
+    } catch (e) {
+        // في حال تعذر المحاولة الأولى يتم الانتقال للمحاولة الاحتياطية تلقائياً
     }
+
+    try {
+        // المحاولة الثانية الاحتياطية (VxTwitter)
+        const match = videoUrl.match(/status\/(\d+)/);
+        if (match) {
+            const tweetId = match[1];
+            const response = await axios.get(`https://api.vxtwitter.com/Twitter/status/${tweetId}`, { timeout: 8000 });
+            const data = response.data;
+
+            if (data && data.media_urls && data.media_urls.length > 0) {
+                const video = data.media_urls.find(u => u.includes('.mp4') || u.includes('video')) || data.media_urls[0];
+                return res.json({
+                    success: true,
+                    video_url: video,
+                    thumbnail: data.mediaDetails && data.mediaDetails[0] ? data.mediaDetails[0].thumbnail_url : ''
+                });
+            }
+        }
+    } catch (err) {}
+
+    res.status(400).json({ success: false, message: 'تعذر جلب الفيديو، تأكد من وجود فيديو في التغريدة' });
 });
 
 const PORT = process.env.PORT || 3000;
