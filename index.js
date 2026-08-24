@@ -41,8 +41,23 @@ app.get('/api/extract', async (req, res) => {
     // --- 2. معالجة روابط الفيسبوك و Reels و Share ---
     if (url.includes("facebook.com") || url.includes("fb.watch") || url.includes("fb.com") || url.includes("share") || url.includes("reel")) {
         try {
+            // تتبع إعادة التوجيه لفك روابط share/v/
+            const headResp = await axios.get(url, {
+                maxRedirects: 5,
+                headers: {
+                    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
+                },
+                timeout: 8000
+            }).catch(e => e.response);
+
+            let finalUrl = url;
+            if (headResp && headResp.request && headResp.request.res && headResp.request.res.responseUrl) {
+                finalUrl = headResp.request.res.responseUrl;
+            }
+
+            // المحاولة الأولى (Rapid Snapsave Engine)
             const response = await axios.post('https://sssbiz.com/api/download', 
-                `url=${encodeURIComponent(url)}`, 
+                `url=${encodeURIComponent(finalUrl)}`, 
                 {
                     headers: {
                         'Content-Type': 'application/x-www-form-urlencoded',
@@ -58,6 +73,29 @@ app.get('/api/extract', async (req, res) => {
                     success: true,
                     video_url: fbData.links[0].url,
                     thumbnail: fbData.thumb || ''
+                });
+            }
+        } catch (e) {}
+
+        // المحاولة الثانية الاحتياطية (Cobalt Engine)
+        try {
+            const cobalt = await axios.post('https://api.cobalt.tools/api/json', {
+                url: url,
+                videoQuality: '720'
+            }, {
+                headers: {
+                    'Accept': 'application/json',
+                    'Content-Type': 'application/json',
+                    'User-Agent': 'Mozilla/5.0'
+                },
+                timeout: 10000
+            });
+
+            if (cobalt.data && (cobalt.data.status === 'stream' || cobalt.data.status === 'redirect')) {
+                return res.json({
+                    success: true,
+                    video_url: cobalt.data.url,
+                    thumbnail: ''
                 });
             }
         } catch (e) {}
