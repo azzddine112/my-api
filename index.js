@@ -40,20 +40,40 @@ app.get('/api/extract', async (req, res) => {
 
     // --- 2. معالجة روابط الفيسبوك و Reels و Share ---
     if (url.includes("facebook.com") || url.includes("fb.watch") || url.includes("fb.com") || url.includes("share") || url.includes("reel")) {
+        let targetUrl = url;
+
+        // تتبع روابط المشاركة share/v/ للحصول على الرابط الاصلي للمنشور
         try {
-            // المحاولة الأولى: عبر محرك Rapid
-            const response = await axios.post('https://sssbiz.com/api/download', 
-                `url=${encodeURIComponent(url)}`, 
+            const redirectResp = await axios.get(url, {
+                maxRedirects: 5,
+                headers: {
+                    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
+                },
+                timeout: 8000
+            });
+            if (redirectResp.request && redirectResp.request.res && redirectResp.request.res.responseUrl) {
+                targetUrl = redirectResp.request.res.responseUrl;
+            }
+        } catch (e) {
+            if (e.response && e.response.headers && e.response.headers.location) {
+                targetUrl = e.response.headers.location;
+            }
+        }
+
+        // المحاولة الأولى: عبر محرك FDown المباشر
+        try {
+            const fbResponse = await axios.post('https://sssbiz.com/api/download', 
+                `url=${encodeURIComponent(targetUrl)}`, 
                 {
                     headers: {
                         'Content-Type': 'application/x-www-form-urlencoded',
-                        'User-Agent': 'Mozilla/5.0 (iPhone; CPU iPhone OS 16_6 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/16.6 Mobile/15E148 Safari/604.1'
+                        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
                     },
                     timeout: 12000
                 }
             );
 
-            const fbData = response.data;
+            const fbData = fbResponse.data;
             if (fbData && fbData.links && fbData.links.length > 0) {
                 return res.json({
                     success: true,
@@ -63,10 +83,10 @@ app.get('/api/extract', async (req, res) => {
             }
         } catch (e) {}
 
+        // المحاولة الثانية: عبر Cobalt
         try {
-            // المحاولة الثانية: استخراج الميديا عبر Cobalt API
             const cobalt = await axios.post('https://api.cobalt.tools/api/json', {
-                url: url,
+                url: targetUrl,
                 videoQuality: '720'
             }, {
                 headers: {
