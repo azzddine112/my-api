@@ -41,27 +41,13 @@ app.get('/api/extract', async (req, res) => {
     // --- 2. معالجة روابط الفيسبوك و Reels و Share ---
     if (url.includes("facebook.com") || url.includes("fb.watch") || url.includes("fb.com") || url.includes("share") || url.includes("reel")) {
         try {
-            // تتبع إعادة التوجيه لفك روابط share/v/
-            const headResp = await axios.get(url, {
-                maxRedirects: 5,
-                headers: {
-                    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
-                },
-                timeout: 8000
-            }).catch(e => e.response);
-
-            let finalUrl = url;
-            if (headResp && headResp.request && headResp.request.res && headResp.request.res.responseUrl) {
-                finalUrl = headResp.request.res.responseUrl;
-            }
-
-            // المحاولة الأولى (Rapid Snapsave Engine)
+            // المحاولة الأولى: عبر محرك Rapid
             const response = await axios.post('https://sssbiz.com/api/download', 
-                `url=${encodeURIComponent(finalUrl)}`, 
+                `url=${encodeURIComponent(url)}`, 
                 {
                     headers: {
                         'Content-Type': 'application/x-www-form-urlencoded',
-                        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)'
+                        'User-Agent': 'Mozilla/5.0 (iPhone; CPU iPhone OS 16_6 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/16.6 Mobile/15E148 Safari/604.1'
                     },
                     timeout: 12000
                 }
@@ -77,8 +63,8 @@ app.get('/api/extract', async (req, res) => {
             }
         } catch (e) {}
 
-        // المحاولة الثانية الاحتياطية (Cobalt Engine)
         try {
+            // المحاولة الثانية: استخراج الميديا عبر Cobalt API
             const cobalt = await axios.post('https://api.cobalt.tools/api/json', {
                 url: url,
                 videoQuality: '720'
@@ -86,9 +72,9 @@ app.get('/api/extract', async (req, res) => {
                 headers: {
                     'Accept': 'application/json',
                     'Content-Type': 'application/json',
-                    'User-Agent': 'Mozilla/5.0'
+                    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)'
                 },
-                timeout: 10000
+                timeout: 12000
             });
 
             if (cobalt.data && (cobalt.data.status === 'stream' || cobalt.data.status === 'redirect')) {
@@ -96,6 +82,12 @@ app.get('/api/extract', async (req, res) => {
                     success: true,
                     video_url: cobalt.data.url,
                     thumbnail: ''
+                });
+            } else if (cobalt.data && cobalt.data.status === 'picker' && cobalt.data.picker.length > 0) {
+                return res.json({
+                    success: true,
+                    video_url: cobalt.data.picker[0].url,
+                    thumbnail: cobalt.data.picker[0].thumb || ''
                 });
             }
         } catch (e) {}
