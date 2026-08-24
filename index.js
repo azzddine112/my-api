@@ -39,10 +39,31 @@ app.get('/api/extract', async (req, res) => {
     }
 
     // --- 2. معالجة روابط الفيسبوك و Share و Reels ---
-    if (url.includes("facebook.com") || url.includes("fb.watch") || url.includes("share") || url.includes("reel")) {
+    if (url.includes("facebook.com") || url.includes("fb.watch") || url.includes("fb.com") || url.includes("share") || url.includes("reel")) {
+        let cleanUrl = url;
+
+        // محاولة فك توجيه رابط المشاركة share/v/
+        try {
+            const redirectCheck = await axios.get(url, {
+                headers: {
+                    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
+                },
+                maxRedirects: 5,
+                timeout: 8000
+            });
+            if (redirectCheck.request && redirectCheck.request.res && redirectCheck.request.res.responseUrl) {
+                cleanUrl = redirectCheck.request.res.responseUrl;
+            }
+        } catch (e) {
+            if (e.response && e.response.headers && e.response.headers.location) {
+                cleanUrl = e.response.headers.location;
+            }
+        }
+
+        // المحاولة الأولى: Snapsave Engine
         try {
             const response = await axios.post('https://sssbiz.com/api/download', 
-                `url=${encodeURIComponent(url)}`, 
+                `url=${encodeURIComponent(cleanUrl)}`, 
                 {
                     headers: {
                         'Content-Type': 'application/x-www-form-urlencoded',
@@ -62,9 +83,10 @@ app.get('/api/extract', async (req, res) => {
             }
         } catch (e) {}
 
+        // المحاولة الثانية: Cobalt Engine
         try {
             const cobalt = await axios.post('https://api.cobalt.tools/api/json', {
-                url: url,
+                url: cleanUrl,
                 videoQuality: '720'
             }, {
                 headers: {
