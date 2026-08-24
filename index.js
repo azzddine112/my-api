@@ -41,59 +41,55 @@ app.get('/api/extract', async (req, res) => {
     // --- 2. معالجة روابط الفيسبوك و Share و Reels ---
     if (url.includes("facebook.com") || url.includes("fb.watch") || url.includes("share") || url.includes("reel")) {
         try {
-            // استخدام واجهة Publer لتجاوز حماية الفيسبوك ورابط share/v
-            const response = await axios.post('https://publer.io/api/v1/media/download', {
-                url: url
-            }, {
-                headers: {
-                    'Content-Type': 'application/json',
-                    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)'
-                },
-                timeout: 15000
-            });
-
-            if (response.data && response.data.payload && response.data.payload.length > 0) {
-                const media = response.data.payload[0];
-                return res.json({
-                    success: true,
-                    video_url: media.path || media.url,
-                    thumbnail: media.thumbnail || ''
-                });
-            }
-        } catch (e) {}
-
-        // محاولة احتياطية ثانية (FBDown Engine)
-        try {
-            const response2 = await axios.post('https://fbdownloader.online/api/ajaxSearch', 
-                `q=${encodeURIComponent(url)}`, 
+            const response = await axios.post('https://sssbiz.com/api/download', 
+                `url=${encodeURIComponent(url)}`, 
                 {
                     headers: {
                         'Content-Type': 'application/x-www-form-urlencoded',
-                        'User-Agent': 'Mozilla/5.0'
+                        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)'
                     },
                     timeout: 12000
                 }
             );
 
-            if (response2.data && response2.data.links && response2.data.links.length > 0) {
+            const fbData = response.data;
+            if (fbData && fbData.links && fbData.links.length > 0) {
                 return res.json({
                     success: true,
-                    video_url: response2.data.links[0].url,
-                    thumbnail: response2.data.thumb || ''
+                    video_url: fbData.links[0].url,
+                    thumbnail: fbData.thumb || ''
                 });
             }
         } catch (e) {}
-    }
 
-    res.status(400).json({ success: false, message: 'تعذر جلب الفيديو، تأكد من صحة الرابط وأن المنشور عام' });
-});
+        try {
+            const cobalt = await axios.post('https://api.cobalt.tools/api/json', {
+                url: url,
+                videoQuality: '720'
+            }, {
+                headers: {
+                    'Accept': 'application/json',
+                    'Content-Type': 'application/json',
+                    'User-Agent': 'Mozilla/5.0'
+                },
+                timeout: 12000
+            });
 
-const PORT = process.env.PORT || 3000;
-app.listen(PORT, () => console.log(`Server running on port ${PORT}`));
-                    success: true,
-                    video_url: cobalt.data.picker[0].url,
-                    thumbnail: cobalt.data.picker[0].thumb || ''
-                });
+            const cData = cobalt.data;
+            if (cData) {
+                if (cData.status === 'stream' || cData.status === 'redirect') {
+                    return res.json({
+                        success: true,
+                        video_url: cData.url,
+                        thumbnail: ''
+                    });
+                } else if (cData.status === 'picker' && cData.picker && cData.picker.length > 0) {
+                    return res.json({
+                        success: true,
+                        video_url: cData.picker[0].url,
+                        thumbnail: cData.picker[0].thumb || ''
+                    });
+                }
             }
         } catch (e) {}
     }
