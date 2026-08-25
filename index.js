@@ -11,7 +11,8 @@ app.get('/', (req, res) => {
 });
 
 app.get('/api/extract', async (req, res) => {
-    let url = req.query.url;
+    // 🔴 قراءة الرابط سواء أُرسل باسم url أو videoUrl
+    let url = req.query.url || req.query.videoUrl;
     if (!url) {
         return res.status(400).json({ success: false, message: 'الرابط مطلوب' });
     }
@@ -35,13 +36,14 @@ app.get('/api/extract', async (req, res) => {
                     });
                 }
             }
-        } catch (e) {}
+        } catch (e) {
+            console.error("Twitter extraction error:", e.message);
+        }
     }
 
-    // --- 2. معالجة روابط ريديت Reddit (عبر جلب ملف JSON المباشر) ---
+    // --- 2. معالجة روابط ريديت Reddit ---
     if (url.includes("reddit.com") || url.includes("redd.it")) {
         try {
-            // فك التوجيه للرابط المختصر أولاً
             let targetUrl = url;
             if (targetUrl.includes('?')) targetUrl = targetUrl.split('?')[0];
             
@@ -77,7 +79,9 @@ app.get('/api/extract', async (req, res) => {
                     thumbnail: thumb
                 });
             }
-        } catch (e) {}
+        } catch (e) {
+            console.error("Reddit extraction error:", e.message);
+        }
     }
 
     res.status(400).json({ success: false, message: 'تعذر جلب الفيديو، تأكد من صحة الرابط وأن المنشور يحتوي على فيديو عام' });
