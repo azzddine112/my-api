@@ -5,75 +5,62 @@ const app = express();
 app.use(cors());
 app.use(express.json());
 
-app.get('/', (req, res) => {
-    res.status(200).send('API Server is Running!');
-});
+app.get('/', (req, res) => res.send('API Engine Active'));
 
-// دعم كلا المسارين /api/extract و /api/download
 const handleExtraction = async (req, res) => {
-    let url = req.query.url || req.query.videoUrl || (req.body && req.body.url);
-    if (!url) {
-        return res.status(400).json({ success: false, message: 'الرابط مطلوب' });
-    }
+    let url = req.query.url || (req.body && req.body.url);
+    if (!url) return res.status(400).json({ success: false, message: 'الرابط مطلوب' });
 
     // --- 1. إنستغرام Instagram ---
     if (url.includes("instagram.com") || url.includes("instagr.am")) {
         try {
             const cleanUrl = url.split('?')[0].replace(/\/$/, "");
 
-            const resCobalt = await fetch('https://api.cobalt.tools/api/json', {
-                method: 'POST',
-                headers: {
-                    'Accept': 'application/json',
-                    'Content-Type': 'application/json',
-                    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36'
-                },
-                body: JSON.stringify({
-                    url: cleanUrl,
-                    videoQuality: '720'
-                })
-            });
+            // استدعاء محرك استخراج سريع ومستقر
+            const apiRes = await fetch(`https://api.vxtwitter.com/status/1`).catch(() => null); // الحفاظ على جاهزية الاتصال
+            const response = await fetch(`https://a2z-api.vercel.app/api/instagram?url=${encodeURIComponent(cleanUrl)}`);
 
-            if (resCobalt.ok) {
-                const data = await resCobalt.json();
+            if (response.ok) {
+                const data = await response.json();
+                
+                // التأكد من بنية البيانات العائدة
+                let videoUrl = "";
+                let thumbUrl = "";
 
-                if (data && data.url) {
-                    return res.json({
-                        success: true,
-                        video_url: data.url,
-                        thumbnail: data.thumb || ''
-                    });
+                if (data.url) {
+                    videoUrl = Array.isArray(data.url) ? data.url[0] : data.url;
+                } else if (data.data && data.data.video_url) {
+                    videoUrl = data.data.video_url;
                 }
 
-                if (data && data.picker && data.picker.length > 0) {
-                    const firstItem = data.picker[0];
+                thumbUrl = data.thumb || data.thumbnail || (data.data ? data.data.thumbnail : "");
+
+                if (videoUrl) {
                     return res.json({
                         success: true,
-                        video_url: firstItem.url,
-                        thumbnail: firstItem.thumb || firstItem.url
+                        video_url: videoUrl,
+                        thumbnail: thumbUrl
                     });
                 }
             }
         } catch (e) {
-            console.error("Instagram Error:", e);
+            console.error("Instagram Extractor Error:", e);
         }
     }
 
     // --- 2. تويتر / X ---
     if (url.includes("twitter.com") || url.includes("x.com")) {
         try {
-            if (url.includes('?')) url = url.split('?')[0];
             const match = url.match(/status\/(\d+)/);
             if (match) {
                 const response = await fetch(`https://api.fxtwitter.com/status/${match[1]}`);
                 if (response.ok) {
                     const data = await response.json();
-                    const tweet = data.tweet;
-                    if (tweet && tweet.media && tweet.media.videos && tweet.media.videos.length > 0) {
+                    if (data.tweet && data.tweet.media && data.tweet.media.videos) {
                         return res.json({
                             success: true,
-                            video_url: tweet.media.videos[0].url,
-                            thumbnail: tweet.media.photos && tweet.media.photos[0] ? tweet.media.photos[0].url : ''
+                            video_url: data.tweet.media.videos[0].url,
+                            thumbnail: data.tweet.media.photos ? data.tweet.media.photos[0]?.url : ''
                         });
                     }
                 }
@@ -83,28 +70,19 @@ const handleExtraction = async (req, res) => {
         }
     }
 
-    // --- 3. ريديت Reddit ---
-    if (url.includes("reddit.com") || url.includes("redd.it")) {
-        try {
-            let targetUrl = url.split('?')[0];
-            if (targetUrl.endsWith('/')) targetUrl = targetUrl.slice(0, -1);
+    return res.status(400).json({ 
+        success: false, 
+        message: 'تعذر استخراج الفيديو، تأكد من صحة الرابط وأن الحساب عام' 
+    });
+};
 
-            const jsonRes = await fetch(`${targetUrl}.json`, {
-                headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)' }
-            });
+app.get('/api/extract', handleExtraction);
+app.post('/api/extract', handleExtraction);
+app.get('/api/download', handleExtraction);
+app.post('/api/download', handleExtraction);
 
-            if (jsonRes.ok) {
-                const data = await jsonRes.json();
-                const postData = data[0].data.children[0].data;
-                let videoUrl = "";
-                let thumb = postData.thumbnail || "";
-
-                if (postData.secure_media && postData.secure_media.reddit_video) {
-                    videoUrl = postData.secure_media.reddit_video.fallback_url;
-                } else if (postData.preview && postData.preview.reddit_video_preview) {
-                    videoUrl = postData.preview.reddit_video_preview.fallback_url;
-                }
-
+const PORT = process.env.PORT || 3000;
+app.listen(PORT, () => console.log(`Server running on port ${PORT}`));
                 if (videoUrl) {
                     return res.json({
                         success: true,
