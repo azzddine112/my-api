@@ -96,8 +96,9 @@ const handleExtraction = async (req, res) => {
     const isTwitter = rawUrl.includes('twitter.com') || rawUrl.includes('x.com');
     const isPinterest = rawUrl.includes('pinterest.com') || rawUrl.includes('pin.it');
     const isTikTok = rawUrl.includes('tiktok.com');
+    const isFacebook = rawUrl.includes('facebook.com') || rawUrl.includes('fb.watch') || rawUrl.includes('fb.com');
 
-    if (!isInstagram && !isTwitter && !isPinterest && !isTikTok) {
+    if (!isInstagram && !isTwitter && !isPinterest && !isTikTok && !isFacebook) {
         return res.status(400).json({ success: false, message: 'المنصة غير مدعومة' });
     }
 
@@ -129,6 +130,9 @@ const handleExtraction = async (req, res) => {
 app.get('/api/extract', handleExtraction);
 app.post('/api/extract', handleExtraction);
 app.get('/api/download', handleExtraction);
+app.post('/api/download', handleExtraction);
+
+const PORT = process.env.PORT ||app.get('/api/download', handleExtraction);
 app.post('/api/download', handleExtraction);
 
 const PORT = process.env.PORT || 3000;
