@@ -12,49 +12,70 @@ const handleExtraction = async (req, res) => {
     let url = req.query.url || (req.body && req.body.url);
     if (!url) return res.status(400).json({ success: false, message: 'الرابط مطلوب' });
 
-    // تنظيف الرابط الأساسي
     const cleanUrl = url.split('?')[0].replace(/\/$/, "");
 
-    try {
-        // استدعاء محرك Cobalt الرئيسي لاستخراج الوسائط
-        const response = await axios.post('https://api.cobalt.tools/api/json', {
-            url: cleanUrl,
-            videoQuality: '720'
-        }, {
-            timeout: 15000,
-            headers: {
-                'Accept': 'application/json',
-                'Content-Type': 'application/json',
-                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36'
+    // --- 1. إنستغرام Instagram ---
+    if (url.includes("instagram.com") || url.includes("instagr.am")) {
+        try {
+            const apiRes = await axios.get(`https://api.vshred.com/ig?url=${encodeURIComponent(cleanUrl)}`, { timeout: 10000 }).catch(() => null);
+            
+            // استخدام محرك معالجة مباشر بديل
+            const response = await axios.get(`https://a2z-api.vercel.app/api/instagram?url=${encodeURIComponent(cleanUrl)}`, {
+                timeout: 12000
+            });
+
+            if (response.data) {
+                const data = response.data;
+                let videoUrl = data.url ? (Array.isArray(data.url) ? data.url[0] : data.url) : (data.data?.video_url || "");
+                let thumbUrl = data.thumb || data.thumbnail || data.data?.thumbnail || "";
+
+                if (videoUrl) {
+                    return res.json({ success: true, video_url: videoUrl, thumbnail: thumbUrl });
+                }
             }
-        });
+        } catch (e) {
+            console.error("IG Error:", e.message);
+        }
+    }
 
-        if (response.data) {
-            const data = response.data;
-            let videoUrl = "";
-            let thumbUrl = "";
-
-            // 1. رابط مباشر للفيديو
-            if (data.url) {
-                videoUrl = data.url;
-                thumbUrl = data.thumb || '';
-            } 
-            // 2. البوم صور/فيديوهات (Picker)
-            else if (data.picker && data.picker.length > 0) {
-                videoUrl = data.picker[0].url;
-                thumbUrl = data.picker[0].thumb || data.picker[0].url;
+    // --- 2. تويتر / X ---
+    if (url.includes("twitter.com") || url.includes("x.com")) {
+        try {
+            const match = url.match(/status\/(\d+)/);
+            if (match) {
+                const response = await axios.get(`https://api.fxtwitter.com/status/${match[1]}`, { timeout: 10000 });
+                if (response.data && response.data.tweet?.media?.videos) {
+                    return res.json({
+                        success: true,
+                        video_url: response.data.tweet.media.videos[0].url,
+                        thumbnail: response.data.tweet.media.photos ? response.data.tweet.media.photos[0]?.url : ''
+                    });
+                }
             }
+        } catch (e) {
+            console.error("Twitter Error:", e.message);
+        }
+    }
 
-            if (videoUrl) {
+    // --- 3. بنتريست Pinterest ---
+    if (url.includes("pinterest.com") || url.includes("pin.it")) {
+        try {
+            const response = await axios.get(url, {
+                headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)' },
+                timeout: 10000
+            });
+            const html = response.data;
+            const match = html.match(/https?:\/\/v1\.pinimg\.com\/videos\/[^\"]+?\.mp4/);
+            if (match) {
                 return res.json({
                     success: true,
-                    video_url: videoUrl,
-                    thumbnail: thumbUrl
+                    video_url: match[0].replace(/\\\//g, "/"),
+                    thumbnail: ""
                 });
             }
+        } catch (e) {
+            console.error("Pinterest Error:", e.message);
         }
-    } catch (e) {
-        console.error("Extraction Error:", e.message);
     }
 
     return res.status(400).json({ 
