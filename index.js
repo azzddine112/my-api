@@ -1,5 +1,6 @@
 const express = require('express');
 const cors = require('cors');
+const axios = require('axios');
 
 const app = express();
 app.use(cors());
@@ -16,14 +17,12 @@ const handleExtraction = async (req, res) => {
         try {
             const cleanUrl = url.split('?')[0].replace(/\/$/, "");
 
-            // استدعاء محرك استخراج سريع ومستقر
-            const apiRes = await fetch(`https://api.vxtwitter.com/status/1`).catch(() => null); // الحفاظ على جاهزية الاتصال
-            const response = await fetch(`https://a2z-api.vercel.app/api/instagram?url=${encodeURIComponent(cleanUrl)}`);
+            const response = await axios.get(`https://a2z-api.vercel.app/api/instagram?url=${encodeURIComponent(cleanUrl)}`, {
+                timeout: 10000
+            });
 
-            if (response.ok) {
-                const data = await response.json();
-                
-                // التأكد من بنية البيانات العائدة
+            if (response.data) {
+                const data = response.data;
                 let videoUrl = "";
                 let thumbUrl = "";
 
@@ -44,7 +43,7 @@ const handleExtraction = async (req, res) => {
                 }
             }
         } catch (e) {
-            console.error("Instagram Extractor Error:", e);
+            console.error("Instagram Extractor Error:", e.message);
         }
     }
 
@@ -53,20 +52,22 @@ const handleExtraction = async (req, res) => {
         try {
             const match = url.match(/status\/(\d+)/);
             if (match) {
-                const response = await fetch(`https://api.fxtwitter.com/status/${match[1]}`);
-                if (response.ok) {
-                    const data = await response.json();
-                    if (data.tweet && data.tweet.media && data.tweet.media.videos) {
+                const response = await axios.get(`https://api.fxtwitter.com/status/${match[1]}`, {
+                    timeout: 10000
+                });
+                if (response.data && response.data.tweet) {
+                    const tweet = response.data.tweet;
+                    if (tweet.media && tweet.media.videos) {
                         return res.json({
                             success: true,
-                            video_url: data.tweet.media.videos[0].url,
-                            thumbnail: data.tweet.media.photos ? data.tweet.media.photos[0]?.url : ''
+                            video_url: tweet.media.videos[0].url,
+                            thumbnail: tweet.media.photos ? tweet.media.photos[0]?.url : ''
                         });
                     }
                 }
             }
         } catch (e) {
-            console.error("Twitter Error:", e);
+            console.error("Twitter Error:", e.message);
         }
     }
 
@@ -83,27 +84,5 @@ app.post('/api/download', handleExtraction);
 
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => console.log(`Server running on port ${PORT}`));
-                if (videoUrl) {
-                    return res.json({
-                        success: true,
-                        video_url: videoUrl,
-                        thumbnail: thumb
-                    });
-                }
-            }
-        } catch (e) {
-            console.error("Reddit Error:", e);
-        }
-    }
-
-    res.status(400).json({ success: false, message: 'تعذر جلب الفيديو، تأكد من صحة الرابط' });
-};
-
-// استقبال طلبات GET و POST
-app.get('/api/extract', handleExtraction);
-app.post('/api/extract', handleExtraction);
-app.get('/api/download', handleExtraction);
-app.post('/api/download', handleExtraction);
-
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => console.log(`Server running on port ${PORT}`));
