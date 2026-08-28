@@ -18,7 +18,10 @@ const handleExtraction = async (req, res) => {
             const cleanUrl = url.split('?')[0].replace(/\/$/, "");
 
             const response = await axios.get(`https://a2z-api.vercel.app/api/instagram?url=${encodeURIComponent(cleanUrl)}`, {
-                timeout: 10000
+                timeout: 12000,
+                headers: {
+                    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
+                }
             });
 
             if (response.data) {
@@ -82,7 +85,5 @@ app.post('/api/extract', handleExtraction);
 app.get('/api/download', handleExtraction);
 app.post('/api/download', handleExtraction);
 
-const PORT = process.env.PORT || 3000;
-app.listen(PORT, () => console.log(`Server running on port ${PORT}`));
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => console.log(`Server running on port ${PORT}`));
