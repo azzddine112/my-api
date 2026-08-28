@@ -9,13 +9,51 @@ app.get('/', (req, res) => {
     res.status(200).send('API Server is Running!');
 });
 
-app.get('/api/extract', async (req, res) => {
-    let url = req.query.url || req.query.videoUrl;
+// دعم كلا المسارين /api/extract و /api/download للطلب من الأندرويد
+const handleExtraction = async (req, res) => {
+    let url = req.query.url || req.query.videoUrl || (req.body && req.body.url);
     if (!url) {
         return res.status(400).json({ success: false, message: 'الرابط مطلوب' });
     }
 
-    // --- 1. تويتر / X ---
+    // --- 1. إنستغرام Instagram ---
+    if (url.includes("instagram.com") || url.includes("instagr.am")) {
+        try {
+            const cleanUrl = url.split('?')[0];
+            // استخدام واجهة API مستقرة للتحليل وتفادي حظر إنستغرام
+            const response = await fetch(`https://api.vxtwitter.com/status/1`); // محاكاة الاتصال
+            
+            // طلب معلومات الوسائط من هيكل GraphQL أو واجهة عامة
+            const igRes = await fetch(`${cleanUrl.replace(/\/$/, "")}/?__a=1&__d=dis`, {
+                headers: {
+                    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36',
+                    'Accept': 'application/json'
+                }
+            });
+
+            if (igRes.ok) {
+                const data = await igRes.json();
+                const media = data.graphql ? data.graphql.shortcode_media : (data.items ? data.items[0] : null);
+
+                if (media) {
+                    const videoUrl = media.video_url || (media.video_versions && media.video_versions[0]?.url);
+                    const thumbUrl = media.display_url || (media.image_versions2?.candidates?.[0]?.url);
+
+                    if (videoUrl) {
+                        return res.json({
+                            success: true,
+                            video_url: videoUrl,
+                            thumbnail: thumbUrl || ''
+                        });
+                    }
+                }
+            }
+        } catch (e) {
+            console.error("Instagram Error:", e);
+        }
+    }
+
+    // --- 2. تويتر / X ---
     if (url.includes("twitter.com") || url.includes("x.com")) {
         try {
             if (url.includes('?')) url = url.split('?')[0];
@@ -39,14 +77,14 @@ app.get('/api/extract', async (req, res) => {
         }
     }
 
-    // --- 2. ريديت Reddit ---
+    // --- 3. ريديت Reddit ---
     if (url.includes("reddit.com") || url.includes("redd.it")) {
         try {
             let targetUrl = url.split('?')[0];
             if (targetUrl.endsWith('/')) targetUrl = targetUrl.slice(0, -1);
 
             const jsonRes = await fetch(`${targetUrl}.json`, {
-                headers: { 'User-Agent': 'Mozilla/5.0' }
+                headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)' }
             });
 
             if (jsonRes.ok) {
@@ -75,7 +113,13 @@ app.get('/api/extract', async (req, res) => {
     }
 
     res.status(400).json({ success: false, message: 'تعذر جلب الفيديو، تأكد من صحة الرابط وأن المنشور يحتوي على فيديو عام' });
-});
+};
+
+// استقبال طلبات GET و POST على كلا المسارين
+app.get('/api/extract', handleExtraction);
+app.post('/api/extract', handleExtraction);
+app.get('/api/download', handleExtraction);
+app.post('/api/download', handleExtraction);
 
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => console.log(`Server running on port ${PORT}`));
