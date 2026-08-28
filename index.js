@@ -97,8 +97,14 @@ const handleExtraction = async (req, res) => {
     const isPinterest = rawUrl.includes('pinterest.com') || rawUrl.includes('pin.it');
     const isTikTok = rawUrl.includes('tiktok.com');
     const isFacebook = rawUrl.includes('facebook.com') || rawUrl.includes('fb.watch') || rawUrl.includes('fb.com');
+    const isReddit = rawUrl.includes('reddit.com') || rawUrl.includes('redd.it');
+    const isSoundCloud = rawUrl.includes('soundcloud.com');
+    const isSnapchat = rawUrl.includes('snapchat.com');
 
-    if (!isInstagram && !isTwitter && !isPinterest && !isTikTok && !isFacebook) {
+    const isSupported = isInstagram || isTwitter || isPinterest || isTikTok ||
+                         isFacebook || isReddit || isSoundCloud || isSnapchat;
+
+    if (!isSupported) {
         return res.status(400).json({ success: false, message: 'المنصة غير مدعومة' });
     }
 
@@ -110,7 +116,7 @@ const handleExtraction = async (req, res) => {
         console.error('yt-dlp failed:', e);
     }
 
-    // محاولات احتياطية حسب المنصة
+    // محاولات احتياطية حسب المنصة (فقط للمنصات اللي عندها بديل مضمون)
     let fallback = null;
     if (isInstagram) fallback = await fallbackInstagram(cleanUrl);
     else if (isTwitter) {
@@ -120,6 +126,14 @@ const handleExtraction = async (req, res) => {
     else if (isPinterest) fallback = await fallbackPinterest(rawUrl);
 
     if (fallback) return res.json({ success: true, ...fallback });
+
+    // رسالة مخصصة لسناب شات لأن دعمه جزئي فقط
+    if (isSnapchat) {
+        return res.status(400).json({
+            success: false,
+            message: 'يدعم سناب شات روابط Spotlight العامة فقط، وليس القصص الخاصة'
+        });
+    }
 
     return res.status(400).json({
         success: false,
