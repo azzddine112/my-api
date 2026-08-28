@@ -132,8 +132,5 @@ app.post('/api/extract', handleExtraction);
 app.get('/api/download', handleExtraction);
 app.post('/api/download', handleExtraction);
 
-const PORT = process.env.PORT ||app.get('/api/download', handleExtraction);
-app.post('/api/download', handleExtraction);
-
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => console.log(`Server running on port ${PORT}`));
