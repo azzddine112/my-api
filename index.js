@@ -20,32 +20,29 @@ const handleExtraction = async (req, res) => {
     if (url.includes("instagram.com") || url.includes("instagr.am")) {
         try {
             const cleanUrl = url.split('?')[0];
-            // استخدام واجهة API مستقرة للتحليل وتفادي حظر إنستغرام
-            const response = await fetch(`https://api.vxtwitter.com/status/1`); // محاكاة الاتصال
-            
-            // طلب معلومات الوسائط من هيكل GraphQL أو واجهة عامة
-            const igRes = await fetch(`${cleanUrl.replace(/\/$/, "")}/?__a=1&__d=dis`, {
+
+            // 🟢 استخدام خدمة Cobalt API المجانية والمستقرة لتفادي حظر إنستغرام
+            const response = await fetch('https://api.cobalt.tools/api/json', {
+                method: 'POST',
                 headers: {
-                    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36',
-                    'Accept': 'application/json'
-                }
+                    'Accept': 'application/json',
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({
+                    url: cleanUrl
+                })
             });
 
-            if (igRes.ok) {
-                const data = await igRes.json();
-                const media = data.graphql ? data.graphql.shortcode_media : (data.items ? data.items[0] : null);
-
-                if (media) {
-                    const videoUrl = media.video_url || (media.video_versions && media.video_versions[0]?.url);
-                    const thumbUrl = media.display_url || (media.image_versions2?.candidates?.[0]?.url);
-
-                    if (videoUrl) {
-                        return res.json({
-                            success: true,
-                            video_url: videoUrl,
-                            thumbnail: thumbUrl || ''
-                        });
-                    }
+            if (response.ok) {
+                const data = await response.json();
+                
+                // الاستجابة من cobalt تعود بصفة مباشرة برابط الفيديو
+                if (data && data.url) {
+                    return res.json({
+                        success: true,
+                        video_url: data.url,
+                        thumbnail: (data.picker && data.picker[0]) ? data.picker[0].thumb : ''
+                    });
                 }
             }
         } catch (e) {
